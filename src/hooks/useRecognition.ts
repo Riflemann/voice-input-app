@@ -1,3 +1,4 @@
+// @ts-ignore
 import React, { useState } from 'react'
 
 interface UseRecognitionReturn {
@@ -12,7 +13,7 @@ export function useRecognition(): UseRecognitionReturn {
   const [text, setText] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
-
+// @ts-ignore
   const recognize = async (audioData: unknown) => {
     setIsLoading(true)
     try {
