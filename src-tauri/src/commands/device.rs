@@ -20,7 +20,7 @@ pub fn get_input_device_names() -> Result<Vec<InputDevice>, String> {
         .pipe(Ok)
 }
 
-pub async fn get_input_device_name() -> Result<InputDevice, String> {
+pub async fn get_default_input_device_name() -> Result<InputDevice, String> {
 	log::debug!("Retrieving input devices");
 	let host = cpal::default_host();
 	log::debug!("Using host: {:?}", host.id());

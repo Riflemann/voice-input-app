@@ -1,33 +1,30 @@
-use std::sync::Mutex;
-
 use tauri::State;
-
+use std::sync::{Arc, Mutex};
 use crate::AudioCapture;
+use crate::audio::service::{start, stop_recording};
 
+#[tauri::command]
+fn start_recording(state: State<Arc<Mutex<AudioCapture>>>) -> Result<String, String> {
+    let mut recording_state = state.lock().map_err(|_| "Failed to acquire lock")?;
+    if recording_state.is_recording {
+        return Err("Recording is already in progress".to_string());
+    }
 
-async fn stop_and_save_audio(
-	state: State<'_, Mutex<AudioCapture>>,
-	file_path: String,
-) -> Result<(), String> {
-	use hound::{WavWriter, WavSpec};
+    // Add logic to start audio recording here
 
-	let mut capture: std::sync::MutexGuard<'_, AudioCapture> = state.lock().unwrap();
-	capture.is_recording = false;
-	// Сохраняем буфер
-	let buffer: std::sync::MutexGuard<'_, Vec<f32>> = capture.buffer.lock().unwrap();
-	let spec: WavSpec = WavSpec {
-		channels: capture.channels,
-		sample_rate: capture.sample_rate,
-		bits_per_sample: 16,
-		sample_format: hound::SampleFormat::Int,
-	};
-	let mut writer = WavWriter::create(file_path, spec)
-		.map_err(|e| format!("Failed to create WAV: {}", e))?;
-	for &sample in buffer.iter() {
-		let sample_i16 = (sample * 32767.0).clamp(-32768.0, 32767.0) as i16;
-		writer.write_sample(sample_i16)
-			.map_err(|e| format!("Failed to write sample: {}", e))?;
-	}
-	writer.finalize().map_err(|e| format!("Finalize error: {}", e))?;
-	Ok(())
+    recording_state.is_recording = true;
+    Ok("Recording started".to_string())
+}
+
+#[tauri::command]
+fn stop_recording(state: State<Arc<Mutex<AudioCapture>>>) -> Result<String, String> {
+    let mut recording_state = state.lock().map_err(|_| "Failed to acquire lock")?;
+    if !recording_state.is_recording {
+        return Err("No recording in progress".to_string());
+    }
+
+    // Add logic to stop audio recording here
+
+    recording_state.is_recording = false;
+    Ok("Recording stopped".to_string())
 }

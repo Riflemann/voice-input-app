@@ -32,4 +32,7 @@ log = "0.4"
 env_logger = "0.10"
 dotenv = "0.15"
 pipe-trait = "0.1"
+lazy_static = "1.5.0"
+dasp = "0.11"
+config = "0.13"
 

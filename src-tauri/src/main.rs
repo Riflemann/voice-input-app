@@ -3,17 +3,19 @@
 // Поддерживаются Windows, macOS, Linux (alsa/pulse/jack)
 mod commands;
 mod audio;
+
 use std::{
 	sync::{Arc, Mutex},
 	time::{Instant},
 };
-use tauri::{State, Emitter};
+use tauri::{Emitter, State};
 use dotenv::dotenv;
-use crate::audio::capture::start_audio_capture;
-use crate::commands::device::{get_input_device_name, get_input_device_names};
+use crate::commands::device::{get_default_input_device_name, get_input_device_names};
+use config::Config; 
 
+#[allow(dead_code)]
 struct AudioCapture {
-	is_recording: bool,                  // Флаг записи
+	is_recording: Arc<Mutex<bool>>,       // Флаг записи
 	buffer: Arc<Mutex<Vec<f32>>>,        // Буфер для сэмплов
 	sample_rate: u32,                    // Частота дискретизации
 	channels: u16,                       // Количество каналов
@@ -22,77 +24,48 @@ struct AudioCapture {
 }
 
 impl Default for AudioCapture {
-	fn default() -> Self {
-		Self {
-			is_recording: false,
-			buffer: Arc::new(Mutex::new(Vec::new())),
-			sample_rate: 44100,
-			channels: 1,
-			start_time: None,
-			volume_level: 1.0,
-		}
-	}
+    fn default() -> Self {
+        Self {
+            is_recording: Arc::new(Mutex::new(false)),
+            buffer: Arc::new(Mutex::new(Vec::new())),
+            sample_rate: 44100,
+            channels: 1,
+            start_time: None,
+            volume_level: 1.0,
+        }
+    }
 }
-
-fn process_audio_data(data: &[f32], buffer: &Arc<Mutex<Vec<f32>>>, window: &tauri::Window) {
-	let mut buffer_guard = buffer.lock().unwrap();
-	for &sample in data {
-		buffer_guard.push(sample);
-	}
-	let max_samples: usize = 44100 * 10;
-	let buffer_len = buffer_guard.len();
-	if buffer_len > max_samples {
-		buffer_guard.drain(0..buffer_len - max_samples);
-	}
-
-	// Limit the scope of the mutable borrow
-	let should_calculate_rms = buffer_guard.len() % 1024 == 0;
-	let buffer_copy = if should_calculate_rms {
-		Some(buffer_guard.clone()) // Clone the data for RMS calculation
-	} else {
-		None
-	};
-	drop(buffer_guard); // Explicitly drop the mutable borrow
-
-	if let Some(buffer_copy) = buffer_copy {
-		let rms = calculate_rms(&buffer_copy);
-		let _ = window.emit("audio-level", rms);
-	}
-}
-
-fn calculate_rms(data: &[f32]) -> f32 {
-	if data.is_empty() { return 0.0; }
-	let sum_squares: f32 = data.iter().map(|&x| x * x).sum();
-	(sum_squares / data.len() as f32).sqrt()
-}
-
-#[tauri::command]
 
 
 #[tokio::main]
 async fn main() {
-	dotenv().ok();
+    // Load environment variables from .env file
+    dotenv().ok();
 
-	env_logger::init();
-	log::info!("Logger initialized");
-	// При старте выводим доступные устройства
-	match get_input_device_name().await {
-		Ok(device) => {
-			log::info!("Available input devices:");
-			log::info!(" - {}", device.name);
-		}
-		Err(err) => {
-			log::error!("Error retrieving devices: {}", err);
-		}
-	}
+    // Initialize the audio capture state
+    let capture = Mutex::new(AudioCapture::default());
 
-	tauri::Builder::default()
-		.manage(Mutex::new(AudioCapture::default()))
-		.invoke_handler(tauri::generate_handler![
-			get_input_device_names,
-			stop_and_save_audio
-		])
-		.run(tauri::generate_context!())
-		.expect("error while running tauri application");
+    // Retrieve the default input device name
+    let device = match get_default_input_device_name().await {
+        Ok(device) => device.name,
+        Err(err) => {
+            log::error!("Failed to get default input device: {}", err);
+            return;
+        }
+    };
 
+    // Start audio capture with the selected device
+    if let Err(err) = start_audio_capture_with_stream(capture.clone(), device).await {
+        log::error!("Failed to start audio capture: {}", err);
+        return;
+    }
+
+    // Build and run the Tauri application
+    tauri::Builder::default()
+        .manage(capture) // Share the audio capture state with the Tauri app
+        .invoke_handler(tauri::generate_handler![
+            get_input_device_names
+        ])
+        .run(tauri::generate_context!())
+        .expect("Error while running Tauri application");
 }
