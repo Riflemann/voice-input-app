@@ -1,22 +1,33 @@
-use cpal::traits::{DeviceTrait, HostTrait};
-use serde::Serialize;
+use std::sync::Mutex;
 
-#[derive(Serialize)]
-pub struct InputDevice {
-    pub name: String,
-}
+use tauri::State;
 
-#[tauri::command]
-pub async fn get_input_device_name() -> Result<InputDevice, String> {
-	log::debug!("Retrieving input devices");
-	let host = cpal::default_host();
-	log::debug!("Using host: {:?}", host.id());
+use crate::AudioCapture;
 
-	let device = host.default_input_device().ok_or_else(|| {
-		format!("Device error: No default input device found")
-	})?;
 
-	let device_name = device.name().map_err(|e| format!("Failed to get device name: {}", e))?;
+async fn stop_and_save_audio(
+	state: State<'_, Mutex<AudioCapture>>,
+	file_path: String,
+) -> Result<(), String> {
+	use hound::{WavWriter, WavSpec};
 
-	Ok(InputDevice { name: device_name })
+	let mut capture: std::sync::MutexGuard<'_, AudioCapture> = state.lock().unwrap();
+	capture.is_recording = false;
+	// Сохраняем буфер
+	let buffer: std::sync::MutexGuard<'_, Vec<f32>> = capture.buffer.lock().unwrap();
+	let spec: WavSpec = WavSpec {
+		channels: capture.channels,
+		sample_rate: capture.sample_rate,
+		bits_per_sample: 16,
+		sample_format: hound::SampleFormat::Int,
+	};
+	let mut writer = WavWriter::create(file_path, spec)
+		.map_err(|e| format!("Failed to create WAV: {}", e))?;
+	for &sample in buffer.iter() {
+		let sample_i16 = (sample * 32767.0).clamp(-32768.0, 32767.0) as i16;
+		writer.write_sample(sample_i16)
+			.map_err(|e| format!("Failed to write sample: {}", e))?;
+	}
+	writer.finalize().map_err(|e| format!("Finalize error: {}", e))?;
+	Ok(())
 }

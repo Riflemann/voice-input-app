@@ -2782,6 +2782,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 
 [[package]]
+name = "pipe-trait"
+version = "0.1.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "365c068903f5d879118cb3c73ab55505572519d83d7b42380822cd8ab05cc35a"
+
+[[package]]
 name = "piper"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4484,6 +4490,7 @@ dependencies = [
  "hound",
  "log",
  "once_cell",
+ "pipe-trait",
  "serde",
  "serde_json",
  "tauri",
