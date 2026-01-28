@@ -12,11 +12,12 @@ export default defineConfig(async () => ({
     emptyOutDir: true
   },
 
-  // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
+  // Опции Vite, настроенные для разработки с Tauri (применяются в `tauri dev` и `tauri build`)
   //
-  // 1. prevent Vite from obscuring rust errors
+  // 1. предотвращаем, чтобы Vite скрывал ошибки Rust
   clearScreen: false,
   // 2. tauri expects a fixed port, fail if that port is not available
+  // 2. Tauri ожидает фиксированный порт — падать, если порт недоступен
   server: {
     port: 1420,
     strictPort: true,
@@ -29,7 +30,7 @@ export default defineConfig(async () => ({
         }
       : undefined,
     watch: {
-      // 3. tell Vite to ignore watching `src-tauri`
+      // 3. сказать Vite игнорировать папку `src-tauri` при watch
       ignored: ["**/src-tauri/**"],
     },
   },

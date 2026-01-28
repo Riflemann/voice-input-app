@@ -1,107 +1,107 @@
 # Voice Input App
 
-Voice Input App is a cross-platform desktop application designed for voice input, audio processing, and speech recognition. It leverages Tauri for the backend (written in Rust) and React with TypeScript for the frontend, providing a seamless and efficient user experience.
+Voice Input App — кроссплатформенное настольное приложение для голосового ввода, обработки аудио и распознавания речи. В качестве бэкенда используется Tauri (Rust), а фронтенд реализован на React с TypeScript, что обеспечивает быструю и отзывчивую работу.
 
-## Features
+## Возможности
 
-- **Voice Input**: Record and process audio input directly from your device.
-- **Speech Recognition**: Convert spoken words into text using advanced recognition algorithms.
-- **Customizable Settings**: Adjust audio and recognition settings to suit your needs.
-- **Cross-Platform**: Runs on Windows, macOS, and Linux.
-- **Modern UI**: Built with React, Zustand, and Tailwind CSS for a responsive and user-friendly interface.
+- **Голосовой ввод**: запись и обработка аудиопотока с устройства.
+- **Распознавание речи**: преобразование речи в текст при помощи моделей распознавания.
+- **Настройки**: возможность гибко настраивать параметры аудио и распознавания.
+- **Кроссплатформенность**: работает на Windows, macOS и Linux.
+- **Современный интерфейс**: React + Zustand + Tailwind CSS для удобного UI.
 
-## Project Structure
+## Структура проекта
 
-### Frontend
-- **Framework**: React with TypeScript
-- **State Management**: Zustand
-- **Styling**: Tailwind CSS
-- **Build Tool**: Vite
-- **Directory**: `src/`
+### Фронтенд
+- **Фреймворк**: React + TypeScript
+- **Состояние**: Zustand
+- **Стили**: Tailwind CSS
+- **Сборка**: Vite
+- **Каталог**: `src/`
 
-### Backend
-- **Framework**: Tauri
-- **Language**: Rust
-- **Audio Processing**: Custom logic using the `cpal` library
-- **Directory**: `src-tauri/`
+### Бэкенд
+- **Фреймворк**: Tauri
+- **Язык**: Rust
+- **Обработка аудио**: собственная логика (используется `cpal`)
+- **Каталог**: `src-tauri/`
 
-## Installation
+## Установка
 
-### Prerequisites
-- Node.js (v16 or higher)
-- Rust (latest stable version)
-- Tauri CLI: Install using `cargo install tauri-cli`
+### Требования
+- Node.js (v16 или выше)
+- Rust (последняя стабильная версия)
+- Tauri CLI: установить `cargo install tauri-cli`
 
-### Steps
-1. Clone the repository:
+### Шаги
+1. Клонируйте репозиторий:
    ```bash
    git clone <repository-url>
    cd voice-input-app
    ```
-2. Install dependencies:
+2. Установите зависимости:
    ```bash
    npm install
    ```
-3. Start the development server:
+3. Запустите режим разработки:
    ```bash
    npm run tauri dev
    ```
 
-## Build
+## Сборка
 
-To build the application for production:
+Собрать приложение для продакшена:
 ```bash
 npm run tauri build
 ```
 
-## Directory Structure
+## Структура каталогов
 
 ```
 voice-input-app/
-├── src/                # Frontend code
-│   ├── components/     # React components
-│   ├── hooks/          # Custom React hooks
-│   ├── stores/         # Zustand stores
-│   ├── utils/          # Utility functions
-├── src-tauri/          # Backend code
-│   ├── audio/          # Audio processing logic
-│   ├── commands/       # Tauri commands
-│   ├── recognition/    # Speech recognition logic
-│   ├── utils/          # Utility modules
-├── package.json        # Node.js dependencies
-├── Cargo.toml          # Rust dependencies
-├── vite.config.js      # Vite configuration
-├── tailwind.config.js  # Tailwind CSS configuration
+├── src/                # Код фронтенда
+│   ├── components/     # React-компоненты
+│   ├── hooks/          # Пользовательские хуки
+│   ├── stores/         # Zustand-хранилища
+│   ├── utils/          # Утилиты
+├── src-tauri/          # Код бэкенда (Rust)
+│   ├── audio/          # Логика обработки аудио
+│   ├── commands/       # Команды Tauri
+│   ├── recognition/    # Логика распознавания речи
+│   ├── utils/          # Вспомогательные модули
+├── package.json        # Node.js зависимости и скрипты
+├── Cargo.toml          # Rust зависимости
+├── vite.config.js      # Конфиг Vite
+├── tailwind.config.js  # Конфиг Tailwind CSS
 ```
 
-## Development
+## Разработка
 
-### Frontend
-- Edit React components in `src/components/`.
-- Use Zustand for state management in `src/stores/`.
-- Add custom hooks in `src/hooks/`.
+### Фронтенд
+- Редактируйте React-компоненты в `src/components/`.
+- Используйте Zustand для управления состоянием в `src/stores/`.
+- Добавляйте хуки в `src/hooks/`.
 
-### Backend
-- Add new Tauri commands in `src-tauri/src/commands/`.
-- Implement audio processing logic in `src-tauri/src/audio/`.
-- Extend speech recognition in `src-tauri/src/recognition/`.
+### Бэкенд
+- Добавляйте команды Tauri в `src-tauri/src/commands/`.
+- Реализуйте логику обработки аудио в `src-tauri/src/audio/`.
+- Расширяйте функционал распознавания в `src-tauri/src/recognition/`.
 
-## Contributing
+## Вклад
 
-Contributions are welcome! Please follow these steps:
-1. Fork the repository.
-2. Create a new branch for your feature or bugfix.
-3. Commit your changes and push the branch.
-4. Open a pull request.
+Пулл-реквесты приветствуются! Порядок работы:
+1. Форкните репозиторий.
+2. Создайте ветку для фичи или исправления.
+3. Закомитьте изменения и запушьте ветку.
+4. Откройте Pull Request.
 
-## License
+## Лицензия
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+Проект лицензирован под MIT. См. файл [LICENSE](LICENSE) для деталей.
 
-## Acknowledgments
+## Благодарности
 
-- [Tauri](https://tauri.app/) for the backend framework.
-- [React](https://reactjs.org/) for the frontend framework.
-- [Zustand](https://zustand-demo.pmnd.rs/) for state management.
-- [Tailwind CSS](https://tailwindcss.com/) for styling.
-- [cpal](https://github.com/RustAudio/cpal) for audio processing in Rust.
+- [Tauri](https://tauri.app/) — за фреймворк бэкенда.
+- [React](https://reactjs.org/) — за фронтенд.
+- [Zustand](https://zustand-demo.pmnd.rs/) — за управление состоянием.
+- [Tailwind CSS](https://tailwindcss.com/) — за стили.
+- [cpal](https://github.com/RustAudio/cpal) — за работу с аудио в Rust.

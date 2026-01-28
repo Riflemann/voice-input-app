@@ -19,7 +19,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
 serde = { version = "1", features = ["derive"] }
 thiserror = "1"
 tracing = "0.1"
@@ -35,4 +35,5 @@ pipe-trait = "0.1"
 lazy_static = "1.5.0"
 dasp = "0.11"
 config = "0.13"
+# whisper-rs = "0.1"  # Требует libclang, закомментирован для быстрого старта
 

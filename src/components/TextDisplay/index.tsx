@@ -1,17 +1,17 @@
 import React from 'react'
+import { useRecognitionStore } from '../../stores/recognitionStore'
 
-interface TextDisplayProps {
-  text?: string
-  isLoading?: boolean
-}
+export function TextDisplay(): React.ReactElement {
+  const { text, isProcessing, isRecognizing } = useRecognitionStore()
 
-export function TextDisplay({ text, isLoading }: TextDisplayProps): React.ReactElement {
+  const isLoading = isProcessing || isRecognizing
+
   return (
     <div className="p-6 bg-white rounded-lg shadow">
       {isLoading && (
-        <p className="text-gray-500 animate-pulse">Обработка...</p>
+        <p className="text-gray-500 animate-pulse">Обработка аудио...</p>
       )}
-      {text && (
+      {text && !isLoading && (
         <p className="text-lg text-gray-800 font-medium">{text}</p>
       )}
       {!text && !isLoading && (
