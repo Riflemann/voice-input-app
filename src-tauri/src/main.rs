@@ -8,19 +8,24 @@ use std::{
 	sync::{Arc, Mutex},
 	time::{Instant},
 };
-use tauri::{Emitter, State};
 use dotenv::dotenv;
 use crate::commands::device::{get_default_input_device_name, get_input_device_names};
-use config::Config; 
+use crate::commands::audio::{start_recording, stop_recording};
+use crate::commands::recognition::recognize_audio;
+use tokio::sync::mpsc;
 
 #[allow(dead_code)]
-struct AudioCapture {
-	is_recording: Arc<Mutex<bool>>,       // Флаг записи
-	buffer: Arc<Mutex<Vec<f32>>>,        // Буфер для сэмплов
-	sample_rate: u32,                    // Частота дискретизации
-	channels: u16,                       // Количество каналов
-	start_time: Option<Instant>,         // Время старта записи
-	volume_level: f32,                   // Последний уровень громкости
+pub struct AudioCapture {
+    pub is_recording: Arc<Mutex<bool>>,       // Флаг записи
+    pub buffer: Arc<Mutex<Vec<f32>>>,        // Буфер для сэмплов
+    pub sample_rate: u32,                    // Частота дискретизации
+    pub channels: u16,                       // Количество каналов
+    pub start_time: Option<Instant>,         // Время старта записи
+    pub volume_level: f32,                   // Последний уровень громкости
+    // Перенесённые свойства процессора
+    pub gain: f32,
+    pub noise_threshold: f32,
+    pub buffer_duration_seconds: usize,
 }
 
 impl Default for AudioCapture {
@@ -32,6 +37,9 @@ impl Default for AudioCapture {
             channels: 1,
             start_time: None,
             volume_level: 1.0,
+            gain: 1.0,
+            noise_threshold: 0.02,
+            buffer_duration_seconds: 10,
         }
     }
 }
@@ -39,33 +47,37 @@ impl Default for AudioCapture {
 
 #[tokio::main]
 async fn main() {
-    // Load environment variables from .env file
+    // Загружаем переменные окружения из файла .env
     dotenv().ok();
+    
+    // Инициализируем логирование
+    env_logger::init();
+    
+    let capture = std::sync::Arc::new(Mutex::new(AudioCapture::default()));
 
-    // Initialize the audio capture state
-    let capture = Mutex::new(AudioCapture::default());
+    // Создаём канал для очереди задач обработки
+    let (tx, rx) = mpsc::channel::<Vec<f32>>(4);
 
-    // Retrieve the default input device name
-    let device = match get_default_input_device_name().await {
-        Ok(device) => device.name,
-        Err(err) => {
-            log::error!("Failed to get default input device: {}", err);
-            return;
-        }
-    };
-
-    // Start audio capture with the selected device
-    if let Err(err) = start_audio_capture_with_stream(capture.clone(), device).await {
-        log::error!("Failed to start audio capture: {}", err);
-        return;
-    }
-
-    // Build and run the Tauri application
+    // Собираем и запускаем приложение Tauri
     tauri::Builder::default()
-        .manage(capture) // Share the audio capture state with the Tauri app
+        .manage(capture.clone())
+        .manage(tx)
         .invoke_handler(tauri::generate_handler![
-            get_input_device_names
+            get_default_input_device_name,
+            get_input_device_names,
+            start_recording,
+            stop_recording,
+            recognize_audio
         ])
+        .setup(move |app| {
+            // Запускаем воркер обработки в фоне, передаём rx и клон capture
+            let handle = app.handle().clone();
+            let capture_for_worker = capture.clone();
+            tokio::spawn(async move {
+                crate::audio::worker::run(rx, capture_for_worker, handle).await;
+            });
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("Error while running Tauri application");
 }

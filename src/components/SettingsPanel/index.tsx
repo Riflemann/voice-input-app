@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { DeviceSelector } from '../DeviceSelector'
 
 interface SettingsPanelProps {}
 
@@ -18,6 +19,7 @@ export function SettingsPanel({}: SettingsPanelProps): React.ReactElement {
       </div>
       {isOpen && (
         <div className="space-y-4">
+          <DeviceSelector />
           <div className="flex items-center justify-between">
             <label className="text-gray-700">Язык</label>
             <select className="px-3 py-2 border border-gray-300 rounded-lg">
