@@ -35,18 +35,46 @@ Voice Input App — кроссплатформенное настольное п
 - **LLVM** (для компиляции Whisper)
 - **CMake** (для сборки Whisper)
 
-### Автоматическая установка (Windows)
+### Установка модели (обязательно!)
 
-```powershell
-# Установка зависимостей для Whisper
-.\setup-whisper.ps1
+Приложение использует модель Whisper для распознавания речи. Модель нужно скачать перед запуском:
 
-# Скачивание модели (base, 142 MB)
-mkdir models -ErrorAction SilentlyContinue
+```bash
+# Создать папку для моделей
+mkdir models
+
+# Скачать модель Whisper.cpp (Base, 141 MB)
+# Windows PowerShell:
 Invoke-WebRequest -Uri "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin" -OutFile "models\ggml-base.bin"
 
+# или macOS/Linux (curl):
+curl -o models/ggml-base.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
+```
+
+### Запуск приложения
+
+```bash
 # Установка npm зависимостей
 npm install
+
+# Dev режим (Vite + Tauri)
+npm run tauri dev
+
+# Сборка (создать bundle)
+npm run build
+npm run tauri build
+```
+
+### Доступные модели
+
+Можно использовать другие модели Whisper:
+- **tiny** (39 MB) — быстро, низкое качество
+- **base** (141 MB) — баланс качества и скорости ✅ **рекомендуется**
+- **small** (465 MB) — лучше качество, медленнее
+- **medium** (1.5 GB) — еще лучше качество
+- **large** (2.9 GB) — лучшее качество
+
+Замени ссылку в команде выше на нужную модель с [HuggingFace](https://huggingface.co/ggerganov/whisper.cpp).
 
 # Запуск
 npm run tauri dev
