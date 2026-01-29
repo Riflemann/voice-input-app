@@ -74,10 +74,7 @@ npm run tauri build
 - **medium** (1.5 GB) — еще лучше качество
 - **large** (2.9 GB) — лучшее качество
 
-Замени ссылку в команде выше на нужную модель с [HuggingFace](https://huggingface.co/ggerganov/whisper.cpp).
-
-# Запуск
-npm run tauri dev
+Смотрите [docs/WHISPER_MODELS.md](docs/WHISPER_MODELS.md) для полного описания моделей и их установки.
 ```
 
 ### Ручная установка
@@ -157,6 +154,38 @@ voice-input-app/
 3. Закомитьте изменения и запушьте ветку.
 4. Откройте Pull Request.
 
+## 📚 Документация
+
+Полное описание архитектуры, аудиопайплайна и инструкций по разработке:
+
+**👉 [ПОЛНЫЙ ИНДЕКС ДОКУМЕНТАЦИИ →](docs/INDEX.md)**
+
+### Основные документы
+
+| Документ | Описание |
+|----------|----------|
+| **[docs/AUDIO_PIPELINE.md](docs/AUDIO_PIPELINE.md)** | Полный аудиопайплайн: захват → обработка → распознавание, адаптивное усиление, параметры |
+| **[docs/WHISPER_MODELS.md](docs/WHISPER_MODELS.md)** | Выбор и установка моделей Whisper, поддерживаемые языки, troubleshooting |
+| **[docs/event-flow.md](docs/event-flow.md)** | Архитектура событий, поток данных между frontend и backend через Tauri |
+| **[docs/FAQ.md](docs/FAQ.md)** | Часто задаваемые вопросы и решение проблем |
+
+### Краткие ссылки по компонентам
+
+**Аудиозахват и обработка:**
+- [`src-tauri/src/audio/capture.rs`](src-tauri/src/audio/capture.rs) — CPAL, инициализация устройства
+- [`src-tauri/src/audio/processor.rs`](src-tauri/src/audio/processor.rs) — Адаптивное усиление, noise gate
+- [`src-tauri/src/audio/worker.rs`](src-tauri/src/audio/worker.rs) — Background обработка (Tokio)
+
+**Распознавание и постобработка:**
+- [`src-tauri/src/recognition/whisper.rs`](src-tauri/src/recognition/whisper.rs) — Whisper inference, переотпробирование, паддинг
+- [`src-tauri/src/recognition/postprocess.rs`](src-tauri/src/recognition/postprocess.rs) — Очистка текста, удаление маркеров
+- [`src-tauri/src/recognition/models.rs`](src-tauri/src/recognition/models.rs) — Управление моделью, lazy loading
+
+**Frontend компоненты:**
+- [`src/components/RecordButton/`](src/components/RecordButton/) — Кнопка записи с управлением потоком
+- [`src/hooks/useRecognition.ts`](src/hooks/useRecognition.ts) — Hook вызова распознавания
+- [`src/stores/audioStore.ts`](src/stores/audioStore.ts) — Zustand состояние для аудио
+
 ## Лицензия
 
 Проект лицензирован под MIT. См. файл [LICENSE](LICENSE) для деталей.
@@ -168,3 +197,4 @@ voice-input-app/
 - [Zustand](https://zustand-demo.pmnd.rs/) — за управление состоянием.
 - [Tailwind CSS](https://tailwindcss.com/) — за стили.
 - [cpal](https://github.com/RustAudio/cpal) — за работу с аудио в Rust.
+- [Whisper.cpp](https://github.com/ggerganov/whisper.cpp) — за локальное распознавание речи.
