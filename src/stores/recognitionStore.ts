@@ -3,6 +3,8 @@ import { create } from 'zustand'
 interface RecognitionStore {
   text: string
   setText: (text: string) => void
+  lastResultEmpty: boolean
+  setLastResultEmpty: (empty: boolean) => void
   isProcessing: boolean
   setIsProcessing: (processing: boolean) => void
   isRecognizing: boolean
@@ -17,6 +19,8 @@ interface RecognitionStore {
 export const useRecognitionStore = create<RecognitionStore>((set) => ({
   text: '',
   setText: (text) => set({ text }),
+  lastResultEmpty: false,
+  setLastResultEmpty: (empty) => set({ lastResultEmpty: empty }),
   isProcessing: false,
   setIsProcessing: (processing) => set({ isProcessing: processing }),
   isRecognizing: false,

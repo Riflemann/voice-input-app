@@ -1,5 +1,5 @@
 // @ts-ignore
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { useRecognitionStore } from '../../stores/recognitionStore'
@@ -17,50 +17,95 @@ interface RecognitionResult {
   audio_path: string
 }
 
+let listenersRefCount = 0
+let unlistenProcessingRef: Promise<() => void> | null = null
+let unlistenRecognitionRef: Promise<() => void> | null = null
+
 export function useRecord(): UseRecordReturn {
   const [isRecording, setIsRecording] = useState(false)
   const { recognize } = useRecognition()
-  const { setWavPaths, setIsProcessing, setText } = useRecognitionStore()
+  const { setWavPaths, setIsProcessing, setText, setLastResultEmpty } = useRecognitionStore()
   const { selectedDevice } = useAudioStore()
 
-  // Подписываемся на событие processing-finished при монтировании компонента
+  // Проверяем статус записи каждую секунду для отслеживания авто-стопа
   useEffect(() => {
-    console.log('[useRecord] Setting up event listeners')
-    
-    const unlistenProcessing = listen<[string, string]>('processing-finished', async (event) => {
-      console.log('[useRecord] processing-finished event received:', event.payload)
-      const [prePath, postPath] = event.payload
-      console.log('Processing finished:', { prePath, postPath })
-      
-      // Сохраняем пути в store
-      setWavPaths(prePath, postPath)
-      setIsProcessing(false)
-      
-      // Автоматически запускаем распознавание на post-обработанном файле
-      try {
-        console.log('[useRecord] Starting recognition for:', postPath)
-        await recognize(postPath)
-      } catch (err) {
-        console.error('Auto-recognition failed:', err)
-      }
-    })
+    if (!isRecording) return
 
-    // Подписываемся на событие recognition-completed для получения результата
-    const unlistenRecognition = listen<RecognitionResult>('recognition-completed', (event) => {
-      console.log('[useRecord] recognition-completed event received:', event.payload)
-      const { text, audio_path } = event.payload
-      console.log('Recognition completed:', { text, audio_path })
-      
-      // Обновляем текст в store (это дублирует результат из recognize(), но обеспечивает консистентность)
-      setText(text)
-    })
+    const checkStatus = setInterval(async () => {
+      try {
+        const status = await invoke<boolean>('get_recording_status')
+        if (!status && isRecording) {
+          console.log('[useRecord] Auto-stop detected, updating UI')
+          setIsRecording(false)
+        }
+      } catch (err) {
+        console.error('Failed to check recording status:', err)
+      }
+    }, 1000)
+
+    return () => clearInterval(checkStatus)
+  }, [isRecording])
+
+  // Подписываемся на события один раз глобально
+  useEffect(() => {
+    listenersRefCount += 1
+
+    if (listenersRefCount === 1) {
+      console.log('[useRecord] Setting up event listeners')
+      let isProcessing = false
+
+      unlistenProcessingRef = listen<[string, string]>('processing-finished', async (event) => {
+        if (isProcessing) return
+
+        isProcessing = true
+        console.log('[useRecord] processing-finished event received:', event.payload)
+        const [prePath, postPath] = event.payload
+        console.log('Processing finished:', { prePath, postPath })
+
+        // Сохраняем пути в store
+        setWavPaths(prePath, postPath)
+        setIsProcessing(false)
+
+        // Автоматически запускаем распознавание на post-обработанном файле
+        try {
+          console.log('[useRecord] Starting recognition for:', postPath)
+          await recognize(postPath)
+        } catch (err) {
+          console.error('Auto-recognition failed:', err)
+        } finally {
+          isProcessing = false
+        }
+      })
+
+      // Подписываемся на событие recognition-completed для получения результата
+      unlistenRecognitionRef = listen<RecognitionResult>('recognition-completed', (event) => {
+        console.log('[useRecord] recognition-completed event received:', event.payload)
+        const { text, audio_path } = event.payload
+        console.log('Recognition completed:', { text, audio_path })
+
+        // Обновляем текст в store
+        const trimmed = text.trim()
+        if (trimmed.length === 0) {
+          setText('')
+          setLastResultEmpty(true)
+        } else {
+          setText(text)
+          setLastResultEmpty(false)
+        }
+      })
+    }
 
     return () => {
-      console.log('[useRecord] Cleaning up event listeners')
-      unlistenProcessing.then((fn) => fn()).catch(console.error)
-      unlistenRecognition.then((fn) => fn()).catch(console.error)
+      listenersRefCount = Math.max(0, listenersRefCount - 1)
+      if (listenersRefCount === 0) {
+        console.log('[useRecord] Cleaning up event listeners')
+        unlistenProcessingRef?.then((fn) => fn()).catch(console.error)
+        unlistenRecognitionRef?.then((fn) => fn()).catch(console.error)
+        unlistenProcessingRef = null
+        unlistenRecognitionRef = null
+      }
     }
-  }, [recognize, setWavPaths, setIsProcessing, setText])
+  }, [])
 
   const startRecord = async () => {
     setIsRecording(true)

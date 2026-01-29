@@ -13,3 +13,6 @@ vite.config.ts.timestamp-*
 /dist
 /out  
 /src-tauri/target
+# Model files (too large for GitHub)
+models/
+*.bin

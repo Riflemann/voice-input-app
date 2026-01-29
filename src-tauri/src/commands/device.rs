@@ -1,4 +1,4 @@
-use cpal::traits::{DeviceTrait, HostTrait};
+use cpal::{default_host, traits::{DeviceTrait, HostTrait}};
 use serde::Serialize;
 use pipe_trait::Pipe;
 
@@ -7,10 +7,14 @@ pub struct InputDevice {
     pub name: String,
 }
 
+/// Возвращает список всех доступных аудио входных устройств.
+/// 
+/// Использует cpal для получения списка устройств от системного хоста.
+/// Фильтрует устройства, которые не могут предоставить имя.
 #[tauri::command]
 pub fn get_input_device_names() -> Result<Vec<InputDevice>, String> {
 	log::debug!("Retrieving input devices");
-	let host = cpal::default_host();
+	let host = default_host();
 	log::debug!("Using host: {:?}", host.id());
 
 	host.input_devices()
@@ -20,10 +24,13 @@ pub fn get_input_device_names() -> Result<Vec<InputDevice>, String> {
         .pipe(Ok)
 }
 
+/// Возвращает системное аудио входное устройство по умолчанию.
+/// 
+/// Если устройство по умолчанию недоступно, возвращает ошибку.
 #[tauri::command]
 pub async fn get_default_input_device_name() -> Result<InputDevice, String> {
 	log::debug!("Retrieving input devices");
-	let host = cpal::default_host();
+	let host = default_host();
 	log::debug!("Using host: {:?}", host.id());
 
 	let device = host.default_input_device().ok_or_else(|| {

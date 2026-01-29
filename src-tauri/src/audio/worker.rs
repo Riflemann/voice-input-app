@@ -1,17 +1,33 @@
-use std::{sync::{Arc, Mutex, RwLock}, time::{SystemTime, UNIX_EPOCH}};
+use std::sync::{Arc, Mutex, RwLock};
 use tokio::sync::mpsc::Receiver;
 use hound;
-use crate::AudioCapture;
+use crate::types::AudioCapture;
 use crate::audio::processor::process_audio;
-use tauri::{AppHandle, Manager, Emitter};
+use crate::utils::cache::SharedAudioCache;
+use tauri::{AppHandle, Emitter};
 
-pub async fn run(mut rx: Receiver<Vec<f32>>, capture: Arc<Mutex<AudioCapture>>, app: AppHandle) {
+/// Background worker для обработки аудио в отдельном потоке.
+/// 
+/// Принимает сэмплы из mpsc канала, сохраняет их в pre-processed WAV,
+/// применяет process_audio для фильтрации/усиления, сохраняет post-processed WAV
+/// и эмитит событие 'processing-finished' с путями к файлам.
+/// 
+/// Параметры:
+/// * `rx` - mpsc receiver для получения сэмплов
+/// * `capture` - Arc на состояние AudioCapture для чтения sample_rate/channels
+/// * `cache` - Arc на AudioCache для генерации путей к временным WAV файлам
+/// * `app` - AppHandle для отправки событий во frontend
+pub async fn run(
+    mut rx: Receiver<Vec<f32>>, 
+    capture: Arc<Mutex<AudioCapture>>, 
+    cache: SharedAudioCache,
+    app: AppHandle
+) {
     log::info!("Audio worker started");
 
     while let Some(samples) = rx.recv().await {
-        let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
-        let pre_path = std::env::temp_dir().join(format!("pre_{}.wav", ts));
-        let post_path = std::env::temp_dir().join(format!("post_{}.wav", ts));
+        let pre_path = cache.generate_wav_path("pre");
+        let post_path = cache.generate_wav_path("post");
 
         // Read sample rate and channels from capture
         let (sample_rate, channels) = {
@@ -68,6 +84,15 @@ pub async fn run(mut rx: Receiver<Vec<f32>>, capture: Arc<Mutex<AudioCapture>>, 
     log::info!("Audio worker exiting");
 }
 
+/// Записывает f32 сэмплы в WAV файл с 16-битным PCM форматом.
+/// 
+/// Конвертирует f32 [-1.0, 1.0] в i16 с ограничением диапазона.
+/// 
+/// Параметры:
+/// * `path` - путь к выходному WAV файлу
+/// * `samples` - срез аудиосэмплов (f32)
+/// * `sample_rate` - частота дискретизации
+/// * `channels` - количество каналов
 fn write_wav_f32_path(path: &std::path::Path, samples: &[f32], sample_rate: u32, channels: u16) -> Result<(), String> {
     let spec = hound::WavSpec {
         channels,

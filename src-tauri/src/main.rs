@@ -3,47 +3,21 @@
 // Поддерживаются Windows, macOS, Linux (alsa/pulse/jack)
 mod commands;
 mod audio;
+mod recognition;
+mod types;
+mod utils;
 
-use std::{
-	sync::{Arc, Mutex},
-	time::{Instant},
-};
+use std::sync::{Arc, Mutex};
 use dotenv::dotenv;
+use crate::types::AudioCapture;
 use crate::commands::device::{get_default_input_device_name, get_input_device_names};
-use crate::commands::audio::{start_recording, stop_recording};
-use crate::commands::recognition::recognize_audio;
+use crate::commands::audio::{start_recording, stop_recording, get_recording_status};
+use crate::commands::recognition::{recognize_audio, init_whisper};
+use crate::recognition::models::ModelSize;
+use crate::recognition::whisper;
+use crate::utils::cache::AudioCache;
 use tokio::sync::mpsc;
-
-#[allow(dead_code)]
-pub struct AudioCapture {
-    pub is_recording: Arc<Mutex<bool>>,       // Флаг записи
-    pub buffer: Arc<Mutex<Vec<f32>>>,        // Буфер для сэмплов
-    pub sample_rate: u32,                    // Частота дискретизации
-    pub channels: u16,                       // Количество каналов
-    pub start_time: Option<Instant>,         // Время старта записи
-    pub volume_level: f32,                   // Последний уровень громкости
-    // Перенесённые свойства процессора
-    pub gain: f32,
-    pub noise_threshold: f32,
-    pub buffer_duration_seconds: usize,
-}
-
-impl Default for AudioCapture {
-    fn default() -> Self {
-        Self {
-            is_recording: Arc::new(Mutex::new(false)),
-            buffer: Arc::new(Mutex::new(Vec::new())),
-            sample_rate: 44100,
-            channels: 1,
-            start_time: None,
-            volume_level: 1.0,
-            gain: 1.0,
-            noise_threshold: 0.02,
-            buffer_duration_seconds: 10,
-        }
-    }
-}
-
+use std::time::Instant;
 
 #[tokio::main]
 async fn main() {
@@ -53,7 +27,10 @@ async fn main() {
     // Инициализируем логирование
     env_logger::init();
     
-    let capture = std::sync::Arc::new(Mutex::new(AudioCapture::default()));
+    let capture = Arc::new(Mutex::new(AudioCapture::default()));
+    
+    // Создаём кэш для временных WAV файлов
+    let cache = Arc::new(AudioCache::new().expect("Failed to create audio cache"));
 
     // Создаём канал для очереди задач обработки
     let (tx, rx) = mpsc::channel::<Vec<f32>>(4);
@@ -61,20 +38,43 @@ async fn main() {
     // Собираем и запускаем приложение Tauri
     tauri::Builder::default()
         .manage(capture.clone())
+        .manage(cache.clone())
         .manage(tx)
         .invoke_handler(tauri::generate_handler![
             get_default_input_device_name,
             get_input_device_names,
             start_recording,
             stop_recording,
-            recognize_audio
+            get_recording_status,
+            recognize_audio,
+            init_whisper
         ])
         .setup(move |app| {
-            // Запускаем воркер обработки в фоне, передаём rx и клон capture
+            // Запускаем воркер обработки в фоне, передаём rx, capture и cache
             let handle = app.handle().clone();
             let capture_for_worker = capture.clone();
+            let cache_for_worker = cache.clone();
             tokio::spawn(async move {
-                crate::audio::worker::run(rx, capture_for_worker, handle).await;
+                crate::audio::worker::run(rx, capture_for_worker, cache_for_worker, handle).await;
+            });
+
+            // Инициализируем Whisper модель на старте приложения (в фоне)
+            tokio::spawn(async move {
+                let start = Instant::now();
+                log::info!("[startup] Initializing Whisper model: base");
+                let result = tokio::task::spawn_blocking(|| whisper::init(ModelSize::Base))
+                    .await
+                    .map_err(|e| format!("Init task failed: {}", e))
+                    .and_then(|res| res);
+
+                match result {
+                    Ok(()) => {
+                        log::info!("[startup] Whisper model initialized in {:?}", start.elapsed());
+                    }
+                    Err(err) => {
+                        log::error!("[startup] Whisper initialization failed: {}", err);
+                    }
+                }
             });
             Ok(())
         })
