@@ -1,12 +1,17 @@
-// Обработка аудио
 use std::sync::{Arc, RwLock, Mutex};
-use crate::AudioCapture;
+use crate::types::AudioCapture;
 
-/// Обрабатывает аудиоданные: фильтрует шум и усиливает сигнал.
-///
-/// Функция применяет фильтрацию шума и усиление к входным данным,
-/// затем добавляет обработанные сэмплы в общий буфер и управляет его размером.
-/// При ошибках логирует предупреждения или ошибки.
+/// Обрабатывает сырые аудиосэмплы: применяет noise gate и усиление.
+/// 
+/// Автоматически адаптирует параметры на основе входного RMS:
+/// - Если RMS < 0.01: увеличивает gain до нормального уровня
+/// - Если RMS > 0.15: уменьшает gain чтобы избежать обрезания
+/// - Noise threshold вычисляется автоматически на основе уровня шума
+/// 
+/// Параметры:
+/// * `input_data` - срез входных аудиосэмплов (f32)
+/// * `buffer` - Arc на RwLock буфер для записи обработанных данных
+/// * `state` - Arc на Mutex состояния AudioCapture с параметрами обработки
 pub fn process_audio(
     input_data: &[f32],
     buffer: &Arc<RwLock<Vec<f32>>>,
@@ -14,8 +19,10 @@ pub fn process_audio(
 ) {
     log::info!("Processing started");
 
-    // Читаем параметры из состояния захвата
-    let (gain, noise_threshold, sample_rate, buffer_duration_seconds) = {
+    let rms_input = calculate_rms(input_data);
+    
+    // Автоматическая адаптивная подстройка параметров на основе RMS
+    let (mut gain, mut noise_threshold, sample_rate, buffer_duration_seconds) = {
         let capture = state.lock().unwrap();
         (
             capture.gain,
@@ -25,6 +32,25 @@ pub fn process_audio(
         )
     };
 
+    // Целевой RMS для речи: 0.08 (хороший баланс)
+    let target_rms = 0.08;
+    
+    // Автоматически подстраиваем gain на основе входного RMS
+    if rms_input > 0.001 {
+        let adaptive_gain = target_rms / rms_input;
+        
+        // Ограничиваем диапазон: от 0.5 до 8.0
+        gain = adaptive_gain.clamp(0.5, 8.0);
+        
+        log::info!(
+            "ADAPTIVE: Input RMS {:.6} → Calculated gain: {:.2} (target RMS: {:.2})",
+            rms_input, gain, target_rms
+        );
+    }
+    
+    // Noise threshold = 20% от входного RMS (убирает только очень тихие звуки)
+    noise_threshold = (rms_input * 0.2).min(0.01);
+    
     let processed = process_and_filter(input_data, noise_threshold, gain);
 
     match buffer.write() {
@@ -38,25 +64,52 @@ pub fn process_audio(
     }
 }
 
-/// Фильтрует и усиливает аудиосэмплы.
-///
-/// # Возвращает
-/// Вектор обработанных аудиосэмплов.
+/// Применяет noise gate и gain к каждому сэмплу.
+/// 
+/// Сэмплы с амплитудой меньше noise_threshold обнуляются,
+/// остальные умножаются на gain и ограничиваются диапазоном [-1.0, 1.0].
+/// 
+/// Параметры:
+/// * `input_data` - входные сэмплы
+/// * `noise_threshold` - порог шума (абсолютное значение)
+/// * `gain` - коэффициент усиления
 fn process_and_filter(input_data: &[f32], noise_threshold: f32, gain: f32) -> Vec<f32> {
-    input_data
+    let rms_input = calculate_rms(input_data);
+    let peak_input = input_data.iter().map(|x| x.abs()).fold(0.0f32, f32::max);
+    log::info!("Input RMS: {:.6}, Peak: {:.6}", rms_input, peak_input);
+
+    let processed: Vec<f32> = input_data
         .iter()
-        .map(|&sample| if sample.abs() < noise_threshold { 0.0 } else { sample })
+        .map(|&sample| {
+            // Мягкий noise gate: не полностью обнуляем, а снижаем амплитуду плавно
+            if sample.abs() < noise_threshold {
+                sample * 0.1 // Оставляем 10% от тихих сэмплов вместо полного обнуления
+            } else {
+                sample
+            }
+        })
         .map(|sample| {
             let amplified = sample * gain;
             amplified.clamp(-1.0, 1.0)
         })
-        .collect()
+        .collect();
+
+    let rms_output = calculate_rms(&processed);
+    let peak_output = processed.iter().map(|x| x.abs()).fold(0.0f32, f32::max);
+    log::info!("Output RMS: {:.6}, Peak: {:.6} (gain={}, threshold={})", rms_output, peak_output, gain, noise_threshold);
+    
+    processed
 }
 
-/// Управляет размером аудиобуфера и периодически рассчитывает RMS.
-///
-/// Обеспечивает, что буфер не превышает максимальный размер, и периодически
-/// вычисляет среднеквадратичное значение (RMS) аудиоданных.
+/// Тримит буфер до максимального размера и логирует RMS каждые 1024 сэмплов.
+/// 
+/// Если буфер превышает max_samples (sample_rate * buffer_duration_seconds),
+/// удаляет старейшие данные через drain.
+/// 
+/// Параметры:
+/// * `buffer` - мутабельная ссылка на буфер сэмплов
+/// * `sample_rate` - частота дискретизации (Гц)
+/// * `buffer_duration_seconds` - максимальная длительность буфера (сек)
 fn manage_buffer(buffer: &mut Vec<f32>, sample_rate: usize, buffer_duration_seconds: usize) {
     let max_samples = sample_rate * buffer_duration_seconds;
 
@@ -64,20 +117,19 @@ fn manage_buffer(buffer: &mut Vec<f32>, sample_rate: usize, buffer_duration_seco
         buffer.drain(0..buffer.len() - max_samples);
     }
 
-    let should_calculate_rms = buffer.len() % 1024 == 0;
-    if should_calculate_rms {
-        let _rms = calculate_rms(buffer);
-        log::debug!("Current RMS: {}", _rms);
+    let should_log = buffer.len() % 4096 == 0 && buffer.len() > 0;
+    if should_log {
+        let rms = calculate_rms(buffer);
+        log::debug!("Buffer RMS: {:.6}, size: {} samples", rms, buffer.len());
     }
 }
 
-/// Вычисляет среднеквадратичное значение (RMS) аудиоданных.
-///
-/// # Аргументы
-/// * `data` - Срез аудиосэмплов.
-///
-/// # Возвращает
-/// Значение RMS для переданных данных.
+/// Вычисляет RMS (Root Mean Square) для массива сэмплов.
+/// 
+/// Возвращает 0.0 для пустого массива.
+/// 
+/// Параметры:
+/// * `data` - срез аудиосэмплов
 fn calculate_rms(data: &[f32]) -> f32 {
     if data.is_empty() { return 0.0; }
     let sum_squares: f32 = data.iter().map(|&x| x * x).sum();

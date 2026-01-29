@@ -4,13 +4,14 @@ Voice Input App — кроссплатформенное настольное п
 
 ## Возможности
 
-- **Голосовой ввод**: запись и обработка аудиопотока с устройства.
-- **Распознавание речи**: преобразование речи в текст при помощи моделей распознавания.
-- **Настройки**: возможность гибко настраивать параметры аудио и распознавания.
-- **Кроссплатформенность**: работает на Windows, macOS и Linux.
-- **Современный интерфейс**: React + Zustand + Tailwind CSS для удобного UI.
+- **Голосовой ввод**: запись и обработка аудиопотока с устройства
+- **Распознавание речи**: Whisper.cpp для локального распознавания (99 языков)
+- **Постобработка**: автоматическая очистка текста от повторений и шумов
+- **Настройки**: гибкая настройка параметров аудио и выбор моделей
+- **Кроссплатформенность**: Windows, macOS и Linux
+- **Современный интерфейс**: React + Zustand + Tailwind CSS
 
-## Структура проекта
+## Технологии
 
 ### Фронтенд
 - **Фреймворк**: React + TypeScript
@@ -20,29 +21,63 @@ Voice Input App — кроссплатформенное настольное п
 - **Каталог**: `src/`
 
 ### Бэкенд
-- **Фреймворк**: Tauri
+- **Фреймворк**: Tauri 2.0
 - **Язык**: Rust
-- **Обработка аудио**: собственная логика (используется `cpal`)
+- **Аудио**: CPAL для захвата
+- **Распознавание**: Whisper.cpp (whisper-rs)
 - **Каталог**: `src-tauri/`
 
-## Установка
+## Быстрый старт
 
 ### Требования
-- Node.js (v16 или выше)
-- Rust (последняя стабильная версия)
-- Tauri CLI: установить `cargo install tauri-cli`
+- Node.js (v18+)
+- Rust (stable)
+- **LLVM** (для компиляции Whisper)
+- **CMake** (для сборки Whisper)
 
-### Шаги
-1. Клонируйте репозиторий:
+### Автоматическая установка (Windows)
+
+```powershell
+# Установка зависимостей для Whisper
+.\setup-whisper.ps1
+
+# Скачивание модели (base, 142 MB)
+mkdir models -ErrorAction SilentlyContinue
+Invoke-WebRequest -Uri "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin" -OutFile "models\ggml-base.bin"
+
+# Установка npm зависимостей
+npm install
+
+# Запуск
+npm run tauri dev
+```
+
+### Ручная установка
+
+1. **Установите LLVM и CMake**:
+   ```powershell
+   winget install LLVM.LLVM
+   winget install Kitware.CMake
+   ```
+
+2. **Клонируйте репозиторий**:
    ```bash
    git clone <repository-url>
    cd voice-input-app
    ```
-2. Установите зависимости:
+
+3. **Установите зависимости**:
    ```bash
    npm install
    ```
-3. Запустите режим разработки:
+
+4. **Скачайте модель Whisper** (см. [models/README.md](models/README.md)):
+   ```powershell
+   mkdir models
+   Invoke-WebRequest -Uri "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin" -OutFile "models\ggml-base.bin"
+   ```
+
+5. **Запустите**:
    ```bash
    npm run tauri dev
    ```

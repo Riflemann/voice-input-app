@@ -1,5 +1,5 @@
 // @ts-ignore
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { useRecognitionStore } from '../stores/recognitionStore'
 
@@ -14,7 +14,7 @@ interface UseRecognitionReturn {
 export function useRecognition(): UseRecognitionReturn {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
-  const { text, setText, setIsRecognizing } = useRecognitionStore()
+  const { text, setText, setIsRecognizing, setLastResultEmpty } = useRecognitionStore()
 
   // @ts-ignore
   const recognize = async (audioPath: string) => {
@@ -23,8 +23,15 @@ export function useRecognition(): UseRecognitionReturn {
     setError(null)
     try {
       const result = await invoke<string>('recognize_audio', { audioPath })
-      setText(result)
-      useRecognitionStore.getState().addToHistory(result)
+      const trimmed = result.trim()
+      if (trimmed.length === 0) {
+        setText('')
+        setLastResultEmpty(true)
+      } else {
+        setText(result)
+        setLastResultEmpty(false)
+        useRecognitionStore.getState().addToHistory(result)
+      }
     } catch (err) {
       const newError = err instanceof Error ? err : new Error(String(err))
       setError(newError)
