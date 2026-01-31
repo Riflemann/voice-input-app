@@ -32,15 +32,15 @@ pub fn process_audio(
         )
     };
 
-    // Целевой RMS для речи: 0.08 (хороший баланс)
-    let target_rms = 0.08;
+    // Целевой RMS для речи: 0.12 (оптимизировано для русского языка)
+    let target_rms = 0.12;
     
     // Автоматически подстраиваем gain на основе входного RMS
     if rms_input > 0.001 {
         let adaptive_gain = target_rms / rms_input;
         
-        // Ограничиваем диапазон: от 0.5 до 8.0
-        gain = adaptive_gain.clamp(0.5, 8.0);
+        // Ограничиваем диапазон: от 0.5 до 10.0 (увеличено для лучшего усиления)
+        gain = adaptive_gain.clamp(0.5, 10.0);
         
         log::info!(
             "ADAPTIVE: Input RMS {:.6} → Calculated gain: {:.2} (target RMS: {:.2})",
@@ -48,8 +48,8 @@ pub fn process_audio(
         );
     }
     
-    // Noise threshold = 20% от входного RMS (убирает только очень тихие звуки)
-    noise_threshold = (rms_input * 0.2).min(0.01);
+    // Noise threshold = 15% от входного RMS (смягченный noise gate для сохранения деталей речи)
+    noise_threshold = (rms_input * 0.15).min(0.01);
     
     let processed = process_and_filter(input_data, noise_threshold, gain);
 
@@ -83,7 +83,7 @@ fn process_and_filter(input_data: &[f32], noise_threshold: f32, gain: f32) -> Ve
         .map(|&sample| {
             // Мягкий noise gate: не полностью обнуляем, а снижаем амплитуду плавно
             if sample.abs() < noise_threshold {
-                sample * 0.1 // Оставляем 10% от тихих сэмплов вместо полного обнуления
+                sample * 0.2 // Оставляем 20% от тихих сэмплов для лучшего сохранения деталей
             } else {
                 sample
             }

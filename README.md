@@ -35,21 +35,15 @@ Voice Input App — кроссплатформенное настольное п
 - **LLVM** (для компиляции Whisper)
 - **CMake** (для сборки Whisper)
 
-### Установка модели (обязательно!)
+### Модель Whisper (автоматически)
 
-Приложение использует модель Whisper для распознавания речи. Модель нужно скачать перед запуском:
+Приложение использует Whisper для распознавания речи. Файлы моделей не хранятся в репозитории (см. [.gitignore](.gitignore)). При первом запуске приложение автоматически проверяет наличие модели и скачивает `base` в директорию данных приложения:
 
-```bash
-# Создать папку для моделей
-mkdir models
+- Windows: `%AppData%/voice-input-app/whisper_models/`
+- macOS: `~/Library/Application Support/voice-input-app/whisper_models/`
+- Linux: `~/.config/voice-input-app/whisper_models/`
 
-# Скачать модель Whisper.cpp (Base, 141 MB)
-# Windows PowerShell:
-Invoke-WebRequest -Uri "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin" -OutFile "models\ggml-base.bin"
-
-# или macOS/Linux (curl):
-curl -o models/ggml-base.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
-```
+Если нужна ручная установка (офлайн/корп. сеть), используйте [docs/WHISPER_MODELS.md](docs/WHISPER_MODELS.md).
 
 ### Запуск приложения
 
