@@ -6,6 +6,7 @@ import { SettingsPanel } from './components/SettingsPanel'
 import { FloatingWidget } from './components/FloatingWidget'
 import { useRecognitionStore } from './stores/recognitionStore'
 import { useWhisper } from './hooks/useWhisper'
+import { useInitialization, InitializationScreen } from './hooks/useInitialization'
 import './index.css'
 
 interface AppProps {}
@@ -13,9 +14,13 @@ interface AppProps {}
 const App: React.FC<AppProps> = () => {
   const { text, isProcessing, history } = useRecognitionStore()
   const { isInitialized, isInitializing, error } = useWhisper()
+  const { isInitializing: isAppInitializing, initError } = useInitialization()
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      {/* Инициализационный экран */}
+      <InitializationScreen isInitializing={isAppInitializing} initError={initError} />
+
       {/* Плавающий виджет с кнопкой записи */}
       <FloatingWidget />
       

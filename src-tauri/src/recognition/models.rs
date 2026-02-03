@@ -9,6 +9,7 @@ static WHISPER_MODEL: Lazy<Arc<Mutex<Option<WhisperContext>>>> =
 
 /// Путь к директории с моделями (по умолчанию)
 const DEFAULT_MODELS_DIR: &str = "models";
+const MODELS_DIR_ENV: &str = "WHISPER_MODELS_DIR";
 
 /// Имена поддерживаемых моделей
 #[derive(Debug, Clone)]
@@ -57,13 +58,11 @@ pub fn load_model(model_path: &Path) -> Result<WhisperContext, String> {
     
     if !model_path.exists() {
         return Err(format!(
-            "Model file not found: {:?}\n\nПожалуйста, скачайте модель:\n\
-            - Tiny (75 MB): https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin\n\
-            - Base (142 MB): https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin\n\
-            - Small (466 MB): https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin\n\
-            \nИ поместите в папку: {}",
+            "Model file not found: {:?}\n\nМодель должна скачиваться автоматически при первом запуске.\n\
+            Проверьте подключение к интернету и права на запись в папку моделей.\n\
+            Текущий путь модели: {:?}",
             model_path,
-            DEFAULT_MODELS_DIR
+            model_path
         ));
     }
     
@@ -103,12 +102,18 @@ pub fn initialize_model(model_size: ModelSize) -> Result<(), String> {
 /// Возвращает путь к модели
 pub fn get_model_path(model_size: ModelSize) -> Result<PathBuf, String> {
     // Пытаемся найти модель в нескольких местах
-    let possible_paths = vec![
+    let mut possible_paths = Vec::new();
+
+    if let Ok(dir) = std::env::var(MODELS_DIR_ENV) {
+        possible_paths.push(PathBuf::from(dir).join(model_size.filename()));
+    }
+
+    possible_paths.extend(vec![
         PathBuf::from(DEFAULT_MODELS_DIR).join(model_size.filename()),
         PathBuf::from("..").join(DEFAULT_MODELS_DIR).join(model_size.filename()),
         PathBuf::from("src").join("assets").join("models").join(model_size.filename()),
         PathBuf::from("../src/assets/models").join(model_size.filename()),
-    ];
+    ]);
     
     for path in possible_paths {
         if path.exists() {

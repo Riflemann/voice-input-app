@@ -25,14 +25,15 @@
 
 ### В: "Model file not found" при запуске
 
-О: Необходимо скачать модель вручную:
+О: Модель должна скачиваться автоматически при первом запуске. Если ошибка сохраняется:
 
-```powershell
-mkdir models
-Invoke-WebRequest -Uri "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin" -OutFile "models\ggml-base.bin"
-```
+1. Проверьте интернет и права на запись.
+2. Убедитесь, что модель находится в директории данных приложения:
+   - Windows: `%AppData%/voice-input-app/whisper_models/`
+   - macOS: `~/Library/Application Support/voice-input-app/whisper_models/`
+   - Linux: `~/.config/voice-input-app/whisper_models/`
 
-Убедитесь, что файл находится в `models/ggml-base.bin` относительно корня проекта.
+Для ручной установки используйте [WHISPER_MODELS.md](WHISPER_MODELS.md#установка-моделей).
 
 ### В: На macOS/Linux не работает
 

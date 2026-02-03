@@ -29,27 +29,23 @@ Voice Input App — кроссплатформенное настольное п
 
 ## Быстрый старт
 
-### Требования
+### Требования (только для разработки)
 - Node.js (v18+)
 - Rust (stable)
 - **LLVM** (для компиляции Whisper)
 - **CMake** (для сборки Whisper)
 
-### Установка модели (обязательно!)
+Для быстрой установки на Windows используйте [scripts/setup-dev-windows.ps1](scripts/setup-dev-windows.ps1).
 
-Приложение использует модель Whisper для распознавания речи. Модель нужно скачать перед запуском:
+### Модель Whisper (автоматически)
 
-```bash
-# Создать папку для моделей
-mkdir models
+Приложение использует Whisper для распознавания речи. Файлы моделей не хранятся в репозитории (см. [.gitignore](.gitignore)). При первом запуске приложение автоматически проверяет наличие модели и скачивает `base` в директорию данных приложения:
 
-# Скачать модель Whisper.cpp (Base, 141 MB)
-# Windows PowerShell:
-Invoke-WebRequest -Uri "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin" -OutFile "models\ggml-base.bin"
+- Windows: `%AppData%/voice-input-app/whisper_models/`
+- macOS: `~/Library/Application Support/voice-input-app/whisper_models/`
+- Linux: `~/.config/voice-input-app/whisper_models/`
 
-# или macOS/Linux (curl):
-curl -o models/ggml-base.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
-```
+Если нужна ручная установка (офлайн/корп. сеть), используйте [docs/WHISPER_MODELS.md](docs/WHISPER_MODELS.md).
 
 ### Запуск приложения
 
@@ -113,6 +109,11 @@ npm run tauri build
 ```bash
 npm run tauri build
 ```
+
+### CI сборка релизов (Windows MSI/NSIS)
+
+Релизы собираются в CI и публикуются как MSI/NSIS артефакты на GitHub Releases.
+Запуск: тег `v*` или вручную через workflow `build-release`.
 
 ## Структура каталогов
 
