@@ -29,11 +29,13 @@ Voice Input App — кроссплатформенное настольное п
 
 ## Быстрый старт
 
-### Требования
+### Требования (только для разработки)
 - Node.js (v18+)
 - Rust (stable)
 - **LLVM** (для компиляции Whisper)
 - **CMake** (для сборки Whisper)
+
+Для быстрой установки на Windows используйте [scripts/setup-dev-windows.ps1](scripts/setup-dev-windows.ps1).
 
 ### Модель Whisper (автоматически)
 
@@ -107,6 +109,11 @@ npm run tauri build
 ```bash
 npm run tauri build
 ```
+
+### CI сборка релизов (Windows MSI/NSIS)
+
+Релизы собираются в CI и публикуются как MSI/NSIS артефакты на GitHub Releases.
+Запуск: тег `v*` или вручную через workflow `build-release`.
 
 ## Структура каталогов
 

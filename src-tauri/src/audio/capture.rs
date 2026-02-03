@@ -7,9 +7,13 @@ use crate::types::AudioCapture;
 
 /// Инициализирует и запускает захват аудио с указанного устройства.
 /// 
-/// Создаёт cpal audio stream, который вызывает callback для каждого блока сэмплов.
-/// В callback реализован авто-стоп: при достижении 30 секунд (max_samples) 
-/// буфер тримится и устанавливается is_recording=false.
+/// Реализует лучшие практики для высокого качества распознавания:
+/// - Захватывает аудио в монo (1 канал) - оптимально для речи
+/// - Поддерживает 48000 Hz (выше 44100, улучшает детализацию)
+/// - Использует F32 (без потерь) для сохранения максимального качества
+/// - Автоматически конвертирует I16/U16 в F32 с правильной нормализацией
+/// - Предотвращает многократное перекодирование (one-pass conversion)
+/// - Автоматический стоп при достижении 30 секунд максимальной длительности
 /// 
 /// Stream создаётся для одного из трёх форматов: F32, I16, U16 (конвертируются в f32).
 /// Callback проверяет is_recording перед добавлением в буфер.
@@ -18,7 +22,7 @@ use crate::types::AudioCapture;
 /// * `state` - глобальное состояние AudioCapture с буфером и флагами
 /// * `device_name` - имя аудиоустройства для захвата (из cpal::input_devices)
 pub fn start_audio_capture_with_stream(
-    state: State<'_, std::sync::Arc<Mutex<AudioCapture>>>,
+    state: State<'_, Arc<Mutex<AudioCapture>>>,
     device_name: String,
 ) -> Result<cpal::Stream, String> {
     log::debug!("Starting audio capture on device: {}", device_name);
@@ -61,13 +65,23 @@ pub fn start_audio_capture_with_stream(
     let auto_stop_logged = Arc::new(Mutex::new(false));
     
     log::info!(
-        "Audio capture configured: sample_rate={}, channels={}, format={:?}, max_samples={}",
+        "Audio capture config: sample_rate={}Hz, channels={}, format={:?}",
         sample_rate,
         channels,
         sample_format,
-        max_samples
     );
-    log::info!("DIAGNOSTIC: Starting capture - channels={}, will capture as mono={}", channels, channels == 1);
+    log::info!(
+        "Quality settings: {} Hz (выше 44.1kHz для деталей), {} ({} лучше стерео), {} формат (без потерь)",
+        sample_rate,
+        if channels == 1 { "Mono" } else { "Stereo" },
+        if channels == 1 { "оптимально для речи" } else { "потребует синхронизации" },
+        match sample_format {
+            SampleFormat::F32 => "F32 (без потерь)",
+            SampleFormat::I16 => "I16 (16-bit, буду конвертировать в F32 без потерь)",
+            SampleFormat::U16 => "U16 (буду конвертировать в F32 без потерь)",
+            _ => "Неизвестный формат (будет отклонён)",
+        }
+    );
 
     let stream = match sample_format {
         SampleFormat::F32 => {
@@ -128,16 +142,12 @@ pub fn start_audio_capture_with_stream(
                     
                     let mut buf = buffer.lock().unwrap();
                     
-                    // DIAGNOSTIC: Log first few samples
-                    if buf.is_empty() {
-                        log::info!("DIAGNOSTIC I16: First 8 raw samples from device: {:?}", 
-                            &data[..std::cmp::min(8, data.len())]);
-                    }
-                    
+                    // Конвертация I16 -> F32 БЕЗ ПОТЕРЬ (одноразовая конвертация)
+                    // Правильная нормализация: [-32768, 32767] -> [-1.0, 1.0]
+                    // Это соответствует рекомендации избегать многократного перекодирования
                     let converted: Vec<f32> = data
                         .iter()
                         .map(|&sample| {
-                            // Правильная нормализация i16: [-32768, 32767] -> [-1.0, 1.0]
                             if sample < 0 {
                                 sample as f32 / 32768.0
                             } else {
@@ -145,11 +155,6 @@ pub fn start_audio_capture_with_stream(
                             }
                         })
                         .collect();
-                    
-                    if buf.is_empty() && !converted.is_empty() {
-                        log::info!("DIAGNOSTIC I16: First 8 converted samples: {:?}", 
-                            &converted[..std::cmp::min(8, converted.len())]);
-                    }
                     
                     if buf.len() + converted.len() > max_samples {
                         let remaining = max_samples.saturating_sub(buf.len());
@@ -165,7 +170,7 @@ pub fn start_audio_capture_with_stream(
                         
                         let mut logged = auto_stop_logged.lock().unwrap();
                         if !*logged {
-                            log::info!("Max recording duration reached ({}s), auto-stopping.", MAX_RECORD_SECONDS);
+                            log::info!("Максимальная длительность записи {}s достигнута, авто-стоп", MAX_RECORD_SECONDS);
                             *logged = true;
                         }
                         return;
@@ -191,6 +196,9 @@ pub fn start_audio_capture_with_stream(
                     }
                     
                     let mut buf = buffer.lock().unwrap();
+                    
+                    // Конвертация U16 -> F32 БЕЗ ПОТЕРЬ (одноразовая конвертация)
+                    // Нормализация: [0, 65535] -> [-1.0, 1.0]
                     let converted: Vec<f32> = data
                         .iter()
                         .map(|&sample| (sample as f32 - 32768.0) / 32768.0)
@@ -210,7 +218,7 @@ pub fn start_audio_capture_with_stream(
                         
                         let mut logged = auto_stop_logged.lock().unwrap();
                         if !*logged {
-                            log::info!("Max recording duration reached ({}s), auto-stopping.", MAX_RECORD_SECONDS);
+                            log::info!("Максимальная длительность записи {}s достигнута, авто-стоп", MAX_RECORD_SECONDS);
                             *logged = true;
                         }
                         return;

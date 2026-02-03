@@ -3,13 +3,15 @@ use crate::types::AudioCapture;
 
 /// Обрабатывает сырые аудиосэмплы: применяет noise gate и усиление.
 /// 
-/// Автоматически адаптирует параметры на основе входного RMS:
-/// - Если RMS < 0.01: увеличивает gain до нормального уровня
-/// - Если RMS > 0.15: уменьшает gain чтобы избежать обрезания
-/// - Noise threshold вычисляется автоматически на основе уровня шума
+/// Реализует лучшие практики для распознавания речи (Whisper):
+/// - Целевой RMS: 0.12 (оптимально для речи, особенно русского языка)
+/// - Адаптивный gain: автоматически подстраивается на основе входного RMS
+/// - Мягкий noise gate: 15% от входного RMS (сохраняет детали речи)
+/// - Предотвращение клиппинга: если peak > 0.95, снижаем gain
+/// - Используется F32 формат без потерь (WAV)
 /// 
 /// Параметры:
-/// * `input_data` - срез входных аудиосэмплов (f32)
+/// * `input_data` - срез входных аудиосэмплов (f32, без потерь)
 /// * `buffer` - Arc на RwLock буфер для записи обработанных данных
 /// * `state` - Arc на Mutex состояния AudioCapture с параметрами обработки
 pub fn process_audio(
@@ -17,41 +19,69 @@ pub fn process_audio(
     buffer: &Arc<RwLock<Vec<f32>>>,
     state: std::sync::Arc<Mutex<AudioCapture>>,
 ) {
-    log::info!("Processing started");
-
     let rms_input = calculate_rms(input_data);
+    let peak_input = input_data.iter().map(|x| x.abs()).fold(0.0f32, f32::max);
     
+    log::debug!(
+        "Processing audio: input RMS={:.6}, peak={:.6}",
+        rms_input, peak_input
+    );
+
     // Автоматическая адаптивная подстройка параметров на основе RMS
-    let (mut gain, mut noise_threshold, sample_rate, buffer_duration_seconds) = {
+    let (mut gain, 
+        sample_rate, 
+        buffer_duration_seconds,
+         peak_threshold,
+          soft_gate_factor
+        ) = {
         let capture = state.lock().unwrap();
         (
             capture.gain,
-            capture.noise_threshold,
             capture.sample_rate as usize,
             capture.buffer_duration_seconds,
+            capture.peak_prevention_threshold,
+            capture.soft_noise_gate_factor,
         )
     };
 
-    // Целевой RMS для речи: 0.12 (оптимизировано для русского языка)
+    // Целевой RMS для речи: 0.12 
+    // (оптимален для Whisper, особенно для русского языка)
     let target_rms = 0.12;
     
     // Автоматически подстраиваем gain на основе входного RMS
     if rms_input > 0.001 {
-        let adaptive_gain = target_rms / rms_input;
+        let mut adaptive_gain = target_rms / rms_input;
         
-        // Ограничиваем диапазон: от 0.5 до 10.0 (увеличено для лучшего усиления)
-        gain = adaptive_gain.clamp(0.5, 10.0);
+        // Ограничиваем диапазон: от 0.5 до 10.0
+        adaptive_gain = adaptive_gain.clamp(0.5, 10.0);
         
-        log::info!(
-            "ADAPTIVE: Input RMS {:.6} → Calculated gain: {:.2} (target RMS: {:.2})",
-            rms_input, gain, target_rms
+        // ПРЕДОТВРАЩЕНИЕ КЛИППИНГА: если peak * gain > peak_threshold, снижаем gain
+        if peak_input * adaptive_gain > peak_threshold {
+            let max_gain_for_peak = (peak_threshold / peak_input).max(0.5);
+            adaptive_gain = adaptive_gain.min(max_gain_for_peak);
+            log::info!(
+                "CLIPPING PREVENTION: Reduced gain from target {:.2} to {:.2} (peak was {:.6})",
+                target_rms / rms_input, adaptive_gain, peak_input
+            );
+        }
+        
+        gain = adaptive_gain;
+        log::debug!(
+            "ADAPTIVE: Input RMS {:.6}, peak {:.6} → gain {:.2} (target RMS: {:.2})",
+            rms_input, peak_input, gain, target_rms
         );
     }
     
-    // Noise threshold = 15% от входного RMS (смягченный noise gate для сохранения деталей речи)
-    noise_threshold = (rms_input * 0.15).min(0.01);
+    // Noise threshold = 15% от входного RMS 
+    // (мягкий noise gate для сохранения деталей речи)
+    let noise_threshold = (rms_input * 0.15).min(0.01);
     
-    let processed = process_and_filter(input_data, noise_threshold, gain);
+    let processed = process_and_filter(
+        input_data,
+        noise_threshold,
+        gain,
+        soft_gate_factor,
+    );
 
     match buffer.write() {
         Ok(mut buf) => {
@@ -64,31 +94,43 @@ pub fn process_audio(
     }
 }
 
-/// Применяет noise gate и gain к каждому сэмплу.
+/// Применяет мягкий noise gate и gain к каждому сэмплу.
 /// 
-/// Сэмплы с амплитудой меньше noise_threshold обнуляются,
-/// остальные умножаются на gain и ограничиваются диапазоном [-1.0, 1.0].
+/// Реализует лучшие практики:
+/// - Сэмплы с амплитудой меньше noise_threshold не полностью обнуляются,
+///   а снижаются с множителем soft_gate_factor (обычно 0.2) для сохранения деталей
+/// - Остальные сэмплы умножаются на gain и ограничиваются диапазоном [-1.0, 1.0]
+/// - Без многократного перекодирования (F32 - формат без потерь)
 /// 
 /// Параметры:
 /// * `input_data` - входные сэмплы
 /// * `noise_threshold` - порог шума (абсолютное значение)
 /// * `gain` - коэффициент усиления
-fn process_and_filter(input_data: &[f32], noise_threshold: f32, gain: f32) -> Vec<f32> {
+/// * `soft_gate_factor` - множитель для тихих сэмплов (обычно 0.2 = 20%)
+fn process_and_filter(
+    input_data: &[f32],
+    noise_threshold: f32,
+    gain: f32,
+    soft_gate_factor: f32,
+) -> Vec<f32> {
     let rms_input = calculate_rms(input_data);
     let peak_input = input_data.iter().map(|x| x.abs()).fold(0.0f32, f32::max);
-    log::info!("Input RMS: {:.6}, Peak: {:.6}", rms_input, peak_input);
+    
+    log::debug!("Input: RMS={:.6}, Peak={:.6}, Threshold={:.6}", rms_input, peak_input, noise_threshold);
 
     let processed: Vec<f32> = input_data
         .iter()
         .map(|&sample| {
-            // Мягкий noise gate: не полностью обнуляем, а снижаем амплитуду плавно
+            // Мягкий noise gate: применяем мягкий множитель для очень тихих сэмплов
+            // Это сохраняет детали речи, включая тихие согласные и фрикативы
             if sample.abs() < noise_threshold {
-                sample * 0.2 // Оставляем 20% от тихих сэмплов для лучшего сохранения деталей
+                sample * soft_gate_factor  // Оставляем % (обычно 20%) от тихих сэмплов
             } else {
                 sample
             }
         })
         .map(|sample| {
+            // Применяем усиление и ограничиваем диапазон (предотвращение клиппинга)
             let amplified = sample * gain;
             amplified.clamp(-1.0, 1.0)
         })
@@ -96,10 +138,15 @@ fn process_and_filter(input_data: &[f32], noise_threshold: f32, gain: f32) -> Ve
 
     let rms_output = calculate_rms(&processed);
     let peak_output = processed.iter().map(|x| x.abs()).fold(0.0f32, f32::max);
-    log::info!("Output RMS: {:.6}, Peak: {:.6} (gain={}, threshold={})", rms_output, peak_output, gain, noise_threshold);
+    
+    log::debug!(
+        "Output: RMS={:.6}, Peak={:.6} (gain={:.2}, threshold={:.6})",
+        rms_output, peak_output, gain, noise_threshold
+    );
     
     processed
 }
+
 
 /// Тримит буфер до максимального размера и логирует RMS каждые 1024 сэмплов.
 /// 
